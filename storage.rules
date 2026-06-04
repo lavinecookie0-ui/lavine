@@ -1,0 +1,59 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    function isImage() {
+      return request.resource.contentType.matches('image/.*');
+    }
+
+    function isVideo() {
+      return request.resource.contentType.matches('video/.*');
+    }
+
+    function isUnder10MB() {
+      return request.resource.size < 10 * 1024 * 1024;
+    }
+
+    function isUnder100MB() {
+      return request.resource.size < 100 * 1024 * 1024;
+    }
+
+    // ─── Ürün Görselleri ve Videoları ───────────────────────────
+    match /products/{fileName} {
+      allow read:   if isAuth();
+      allow write:  if isAuth() && ((isImage() && isUnder10MB()) || (isVideo() && isUnder100MB()));
+      allow delete: if isAuth();
+    }
+
+    // ─── Popup Görselleri ────────────────────────────────────────
+    match /popups/{fileName} {
+      allow read:   if isAuth();
+      allow write:  if isAuth() && isImage() && isUnder10MB();
+      allow delete: if isAuth();
+    }
+
+    // ─── Bayilik Başvuru Fotoğrafları ────────────────────────────
+    // Başvuru sırasında auth hesabı oluşturulup hemen upload yapılır
+    match /applications/{fileName} {
+      allow read:   if isAuth();
+      allow write:  if isAuth() && isImage() && isUnder10MB();
+      allow delete: if isAuth();
+    }
+
+    // ─── İşletme Görselleri ─────────────────────────────────────
+    match /businesses/{fileName} {
+      allow read:   if isAuth();
+      allow write:  if isAuth() && isImage() && isUnder10MB();
+      allow delete: if isAuth();
+    }
+
+    // ─── Diğer Tüm Dosyalar (Erişim Yok) ───────────────────────
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

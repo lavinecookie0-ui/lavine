@@ -1,0 +1,171 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── Yardımcı Fonksiyonlar ───────────────────────────────
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return isAuth() && getUserData().role == 'admin';
+    }
+
+    function isBusiness() {
+      return isAuth() && getUserData().role == 'business';
+    }
+
+    function isActiveBusiness() {
+      return isBusiness() && getUserData().status == 'active';
+    }
+
+    function isDriver() {
+      return isAuth() && getUserData().role == 'driver';
+    }
+
+    function isActiveDriver() {
+      return isDriver() && getUserData().status == 'active';
+    }
+
+    function isOwner(uid) {
+      return isAuth() && request.auth.uid == uid;
+    }
+
+    // ─── Kullanıcılar ─────────────────────────────────────────
+    match /users/{userId} {
+      allow read:   if isOwner(userId) || isAdmin();
+      allow create: if (isAuth() && isOwner(userId)) || isAdmin();
+      allow update: if isAdmin() || isOwner(userId);
+      allow delete: if isAdmin();
+    }
+
+    // ─── Bayilik Başvuruları ──────────────────────────────────
+    match /applications/{appId} {
+      allow create: if isAuth();
+      allow read:   if isAdmin() || (isAuth() && resource.data.email == request.auth.token.email);
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ─── İşletmeler ───────────────────────────────────────────
+    match /businesses/{businessId} {
+      allow read:   if isAdmin() || isActiveDriver() || (isBusiness() && getUserData().businessId == businessId);
+      allow create: if isAdmin();
+      allow update: if isAdmin() || (isBusiness() && getUserData().businessId == businessId);
+      allow delete: if isAdmin();
+    }
+
+    // ─── Siparişler ───────────────────────────────────────────
+    match /orders/{orderId} {
+      function isValidDriverOrderUpdate() {
+        let allowedFields = ['status', 'updatedAt', 'history', 'deliveredBy', 'deliveryConfirmedByDriver', 'deliveryConfirmedByDriverId', 'deliveryConfirmedByDriverName', 'deliveryConfirmedAt'];
+        let affectedKeys = request.resource.data.diff(resource.data).affectedKeys();
+        let newStatus = request.resource.data.status;
+        return affectedKeys.hasOnly(allowedFields) && (newStatus == 'delivery_pending_admin_confirm' || newStatus == 'delivery_failed');
+      }
+
+      allow read:   if isAdmin() || isActiveDriver() || (isActiveBusiness() && resource.data.businessId == getUserData().businessId);
+      allow create: if isAdmin() || (isActiveBusiness() && request.resource.data.businessId == getUserData().businessId);
+      allow update: if isAdmin() || (isActiveDriver() && isValidDriverOrderUpdate()) || (isActiveBusiness() && resource.data.businessId == getUserData().businessId);
+      allow delete: if isAdmin();
+    }
+
+    // ─── Ürünler ──────────────────────────────────────────────
+    match /products/{productId} {
+      allow read:   if isAuth();
+      allow write:  if isAdmin();
+    }
+
+    // ─── Cari Hesap ───────────────────────────────────────────
+    match /ledgerEntries/{entryId} {
+      allow read:   if isAdmin() || (isActiveBusiness() && resource.data.businessId == getUserData().businessId);
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ─── Popuplar & Kampanyalar ───────────────────────────────
+    match /popups/{popupId} {
+      allow read:   if isAdmin() || (isAuth() && resource.data.isActive == true);
+      allow write:  if isAdmin();
+    }
+
+    match /campaigns/{campaignId} {
+      allow read:   if isAdmin() || (isAuth() && resource.data.isActive == true);
+      allow write:  if isAdmin();
+    }
+
+    // ─── Çark (Wheel) Sistemleri ──────────────────────────────
+    match /wheelPrizes/{prizeId} {
+      allow read:   if isAuth();
+      allow write:  if isAdmin();
+    }
+
+    match /wheelSpins/{spinId} {
+      allow read:   if isAdmin() || (isActiveBusiness() && resource.data.businessId == getUserData().businessId);
+      allow create: if isAdmin() || (isActiveBusiness() && request.resource.data.businessId == getUserData().businessId);
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /pointsTransactions/{transactionId} {
+      allow read:   if isAdmin() || (isActiveBusiness() && resource.data.businessId == getUserData().businessId);
+      allow create: if isAdmin() || (isActiveBusiness() && request.resource.data.businessId == getUserData().businessId);
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ─── Kataloglar ───────────────────────────────────────────
+    match /catalogs/{catalogId} {
+      allow read:   if isAuth();
+      allow write:  if isAdmin();
+    }
+
+    // ─── Rotalar ─────────────────────────────────────────────
+    match /routes/{routeId} {
+      allow read:   if isAdmin() || (isActiveDriver() && resource.data.driverId == request.auth.uid);
+      allow create: if isAdmin();
+      allow update: if isAdmin() || (isActiveDriver() && resource.data.driverId == request.auth.uid);
+      allow delete: if isAdmin();
+    }
+    
+    // ─── Sürücüler (Drivers) ─────────────────────────────────
+    match /drivers/{driverId} {
+      allow read:   if isAdmin() || isOwner(resource.data.userId);
+      allow write:  if isAdmin();
+    }
+
+    match /deliveries/{deliveryId} {
+      allow read:   if isAdmin();
+      allow write:  if isAdmin();
+    }
+
+    // ─── Ayarlar ─────────────────────────────────────────────
+    match /settings/{settingId} {
+      allow read:   if isAuth();
+      allow write:  if isAdmin();
+    }
+
+    // ─── Audit Logs ──────────────────────────────────────────
+    match /auditLogs/{logId} {
+      allow read:   if isAdmin();
+      allow create: if isAdmin() || (isAuth() && request.resource.data.actorId == request.auth.uid);
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+    // ─── Public Forms ──────────────────────────────────────────
+    match /appointmentRequests/{docId} {
+      allow create: if true;
+      allow read, update, delete: if isAdmin();
+    }
+
+    match /contactMessages/{docId} {
+      allow create: if true;
+      allow read, update, delete: if isAdmin();
+    }
+  }
+}
