@@ -22,7 +22,7 @@ export function PublicHeader() {
 
   return (
     <header style={{
-      position: 'fixed', top: 0, left: 0, right: 0, zIndex: 50,
+      position: 'absolute', top: 0, left: 0, right: 0, zIndex: 50,
       background: 'transparent',
       backdropFilter: 'none',
       borderBottom: 'none',
