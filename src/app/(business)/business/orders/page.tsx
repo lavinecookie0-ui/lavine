@@ -23,7 +23,7 @@ export default function BusinessOrdersPage() {
   const currentActor = { id: currentUser?.uid || userData?.uid || 'unknown', name: currentUser?.displayName || currentUser?.email || 'İşletme', role: 'business' as const };
   const [orders, setOrders] = useState<Order[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  const [pointsRate, setPointsRate] = useState(0.1);
+
   const [loading, setLoading] = useState(true);
   
   const [viewOrder, setViewOrder] = useState<Order | null>(null);
@@ -40,8 +40,7 @@ export default function BusinessOrdersPage() {
     if (!userData?.businessId) return;
     const u1 = subscribeToBusinessOrders(userData.businessId, d => { setOrders(d); setLoading(false); });
     const u2 = subscribeToActiveProducts(d => setProducts(d));
-    const u3 = subscribeToSettings(s => setPointsRate(s.pointsRate));
-    return () => { u1(); u2(); u3(); };
+    return () => { u1(); u2(); };
   }, [userData?.businessId]);
 
   const handleDelete = async (id: string) => {
@@ -68,7 +67,7 @@ export default function BusinessOrdersPage() {
     setSaving(true);
     try {
       const newTotal = editItems.reduce((sum, item) => sum + item.totalPrice, 0);
-      await updateOrderItems(editOrder.id, editItems, newTotal, pointsRate, currentActor, 'Sipariş ürünleri İşletme tarafından güncellendi.');
+      await updateOrderItems(editOrder.id, editItems, newTotal, currentActor, 'Sipariş ürünleri İşletme tarafından güncellendi.');
       toast.success('Sipariş başarıyla güncellendi');
       setEditOrder(null);
     } catch {
@@ -300,7 +299,6 @@ export default function BusinessOrdersPage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 16, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
               <div>
                 <span style={{ fontSize: 13, color: '#5c5c70', display: 'block' }}>Yeni Toplam</span>
-                <span style={{ fontSize: 11, color: '#fbbf24' }}>+{Math.floor(editTotal * pointsRate)} puan ⭐</span>
               </div>
               <span style={{ fontSize: 24, fontWeight: 800, color: '#f1f1f5' }}>{formatCurrency(editTotal)}</span>
             </div>

@@ -11,13 +11,11 @@ import { Globe, Link2, MapPin } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '@/contexts/AuthContext';
 
+import { WheelSettingsTab } from '@/components/admin/WheelSettingsTab';
+
 export default function AdminSettingsPage() {
   const { userData, currentUser } = useAuth();
-  const [activeTab, setActiveTab] = useState<'points' | 'support' | 'publicSite'>('points');
-  
-  // Points State
-  const [pointsRate, setPointsRate] = useState('0.1');
-  const [savingPoints, setSavingPoints] = useState(false);
+  const [activeTab, setActiveTab] = useState<'wheel' | 'support' | 'publicSite'>('wheel');
 
   // Support State
   const [supportData, setSupportData] = useState<SupportSettings>({
@@ -35,18 +33,12 @@ export default function AdminSettingsPage() {
   const [savingPublicSite, setSavingPublicSite] = useState(false);
 
   useEffect(() => {
-    const unsubPoints = subscribeToSettings((data: SettingsType) => setPointsRate(data?.pointsRate?.toString() || '0'));
     const unsubSupport = subscribeToSupportSettings((data) => { if(data) setSupportData(data); });
     const unsubPublicSite = subscribeToPublicSiteSettings((data) => { if(data) setPublicSiteData({...FALLBACK_SITE_INFO, ...data}); });
-    return () => { unsubPoints(); unsubSupport(); unsubPublicSite(); };
+    return () => { unsubSupport(); unsubPublicSite(); };
   }, []);
 
-  const handleSavePoints = async () => {
-    setSavingPoints(true);
-    try { await updateSettings({ pointsRate: parseFloat(pointsRate) }); toast.success('Puan ayarları kaydedildi'); }
-    catch { toast.error('Kaydetme başarısız'); }
-    finally { setSavingPoints(false); }
-  };
+
 
   const handleSaveSupport = async () => {
     if (!userData) return;
@@ -78,8 +70,6 @@ export default function AdminSettingsPage() {
     finally { setSavingPublicSite(false); }
   };
 
-  const rate = parseFloat(pointsRate || '0');
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       <AdminHeader title="Ayarlar" subtitle="Sistem ve modül ayarları" />
@@ -87,15 +77,15 @@ export default function AdminSettingsPage() {
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 32, padding: '0 32px', borderBottom: '1px solid rgba(255,255,255,0.06)', background: '#111118' }}>
         <button
-          onClick={() => setActiveTab('points')}
+          onClick={() => setActiveTab('wheel')}
           style={{
             background: 'none', border: 'none', padding: '16px 0', fontSize: 14, fontWeight: 600, cursor: 'pointer',
-            color: activeTab === 'points' ? '#f1f1f5' : '#5c5c70',
-            borderBottom: `2px solid ${activeTab === 'points' ? '#9f1239' : 'transparent'}`,
+            color: activeTab === 'wheel' ? '#f1f1f5' : '#5c5c70',
+            borderBottom: `2px solid ${activeTab === 'wheel' ? '#9f1239' : 'transparent'}`,
             transition: 'all 200ms'
           }}
         >
-          Puan Ayarları
+          Çark Ayarları
         </button>
         <button
           onClick={() => setActiveTab('support')}
@@ -124,50 +114,8 @@ export default function AdminSettingsPage() {
       <div className="responsive-padding" style={{ flex: 1, overflowY: 'auto', padding: '28px 32px' }}>
         <div style={{ maxWidth: 600 }}>
           
-          {activeTab === 'points' && (
-            <div style={{ background: '#16161e', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 16, padding: 28 }}>
-              {/* Header */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 28 }}>
-                <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(245,158,11,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Star size={20} color="#fbbf24" />
-                </div>
-                <div>
-                  <h3 style={{ fontSize: 15, fontWeight: 700, color: '#f1f1f5', margin: 0 }}>OG Puan Sistemi</h3>
-                  <p style={{ fontSize: 12, color: '#5c5c70', margin: '3px 0 0' }}>Her 1₺ harcama için kazanılacak puan miktarı</p>
-                </div>
-              </div>
-
-              {/* Input */}
-              <div style={{ marginBottom: 20 }}>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#9898a8', marginBottom: 8 }}>
-                  Puan Oranı (1₺ = ? puan)
-                </label>
-                <input
-                  type="number" min="0" step="0.01" value={pointsRate}
-                  onChange={e => setPointsRate(e.target.value)}
-                  style={{ width: '100%', boxSizing: 'border-box', padding: '12px 16px', borderRadius: 12, background: '#1e1e2a', border: '1px solid rgba(255,255,255,0.08)', color: '#f1f1f5', fontSize: 15, outline: 'none', fontFamily: 'inherit' }}
-                  onFocus={e => e.target.style.borderColor = '#9f1239'}
-                  onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.08)'}
-                />
-                <p style={{ fontSize: 12, color: '#5c5c70', marginTop: 8 }}>Örnek: 0.1 oranında 100₺ sipariş = 10 puan</p>
-              </div>
-
-              {/* Preview */}
-              <div style={{ padding: '16px 20px', background: '#1e1e2a', borderRadius: 12, marginBottom: 24 }}>
-                <p style={{ fontSize: 12, color: '#5c5c70', marginBottom: 14 }}>Örnek hesaplama:</p>
-                <div style={{ display: 'flex', gap: 20 }}>
-                  {[100, 500, 1000].map(amount => (
-                    <div key={amount} style={{ textAlign: 'center' }}>
-                      <p style={{ fontSize: 12, color: '#5c5c70', margin: '0 0 5px' }}>{amount}₺</p>
-                      <p style={{ fontSize: 18, fontWeight: 800, color: '#fbbf24', margin: 0 }}>{Math.floor(amount * rate)}</p>
-                      <p style={{ fontSize: 11, color: '#5c5c70', margin: '2px 0 0' }}>puan</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <Button onClick={handleSavePoints} loading={savingPoints} leftIcon={<Save size={15} />}>Kaydet</Button>
-            </div>
+          {activeTab === 'wheel' && (
+            <WheelSettingsTab />
           )}
 
           {activeTab === 'support' && (

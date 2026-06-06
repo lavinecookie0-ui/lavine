@@ -62,7 +62,7 @@ export default function BusinessOrderPage() {
   const [pastOrders, setPastOrders] = useState<Order[]>([]);
   const [business, setBusiness] = useState<Business | null>(null);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [pointsRate, setPointsRate] = useState(0.1);
+
   const [loading, setLoading] = useState(true);
 
   const [search, setSearch] = useState('');
@@ -89,13 +89,12 @@ export default function BusinessOrderPage() {
       });
       setCampaigns(valid);
     });
-    const u3 = subscribeToSettings(s => setPointsRate(s.pointsRate));
     if (userData?.businessId) {
       const u4 = subscribeToBusinessOrders(userData.businessId, o => setPastOrders(o));
       const u5 = subscribeToDocument<Business>('businesses', userData.businessId, b => setBusiness(b));
-      return () => { u1(); u2(); u3(); u4(); u5(); };
+      return () => { u1(); u2(); u4(); u5(); };
     }
-    return () => { u1(); u2(); u3(); };
+    return () => { u1(); u2(); };
   }, [userData?.businessId]);
 
   const isFiltering = search.trim() !== '' || brandFilter !== '';
@@ -132,7 +131,7 @@ export default function BusinessOrderPage() {
         businessId: userData!.businessId!, businessName: business?.name || '',
         items: items.map(i => ({ productId: i.product.id, productName: i.product.name, productCode: i.product.productCode, unit: i.product.unit, brand: i.product.brand, price: i.product.price, quantity: i.quantity, totalPrice: i.product.price * i.quantity })),
         totalAmount, status: 'pending', fridgeTemperature: temp,
-      }, pointsRate, currentActor);
+      }, currentActor);
       clearCart(); setShowConfirm(false); setFridgeTemp(''); setShowCart(false);
       toast.success('Sipariş oluşturuldu! 🎉');
     } catch (err: any) {
@@ -143,7 +142,7 @@ export default function BusinessOrderPage() {
     }
   };
 
-  const estimatedPoints = Math.floor(totalAmount * pointsRate);
+
 
   // Cari Limit Hesaplamaları
   const currentDebt = business?.currentDebt || 0;

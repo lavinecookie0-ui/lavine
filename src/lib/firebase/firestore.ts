@@ -399,7 +399,6 @@ export function subscribeToBusinessOrders(
 
 export async function createOrder(
   orderData: Omit<Order, 'id' | 'createdAt'>,
-  pointsRate: number,
   actor: Actor
 ): Promise<string> {
   if (!orderData.items || orderData.items.length === 0) {
@@ -498,7 +497,6 @@ export async function updateOrderItems(
   orderId: string,
   newItems: Order['items'],
   newTotalAmount: number,
-  pointsRate: number,
   actor: Actor,
   historyDesc?: string
 ): Promise<void> {
@@ -915,16 +913,20 @@ export function subscribeToSettings(callback: (settings: Settings) => void): Uns
     if (snapshot.exists()) {
       callback(snapshot.data() as Settings);
     } else {
-      callback({ pointsRate: 0.1 });
+      callback({
+        wheelEnabled: true,
+        dailySpinsDefault: 1,
+        wheelDescription: 'Çarkı çevirin ve sürpriz ödüller kazanın!'
+      });
     }
   });
 }
 
 export async function updateSettings(data: Partial<Settings>): Promise<void> {
-  await updateDoc(doc(db, 'settings', 'global'), {
+  await setDoc(doc(db, 'settings', 'global'), {
     ...data,
     updatedAt: serverTimestamp(),
-  });
+  }, { merge: true });
 }
 
 export function subscribeToSupportSettings(callback: (settings: SupportSettings) => void): Unsubscribe {
@@ -1026,9 +1028,15 @@ export function subscribeToWheelPrizes(callback: (prizes: WheelPrize[]) => void)
 }
 
 export function subscribeToPointsTransactions(businessId: string, callback: (txs: PointsTransaction[]) => void): Unsubscribe {
-  const q = query(collection(db, 'pointsTransactions'), where('businessId', '==', businessId), orderBy('createdAt', 'desc'));
+  const q = query(collection(db, 'pointsTransactions'), where('businessId', '==', businessId));
   return onSnapshot(q, (snapshot) => {
-    const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }) as PointsTransaction);
+    const data = snapshot.docs
+      .map(d => ({ id: d.id, ...d.data() }) as PointsTransaction)
+      .sort((a, b) => {
+        const ta = (a.createdAt as any)?.seconds ?? 0;
+        const tb = (b.createdAt as any)?.seconds ?? 0;
+        return tb - ta;
+      });
     callback(data);
   });
 }

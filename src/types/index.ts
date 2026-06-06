@@ -262,7 +262,9 @@ export interface Campaign {
 // ─────────────────────────────────────────────
 
 export interface Settings {
-  pointsRate: number; // TL başına kaç puan
+  wheelEnabled: boolean;
+  dailySpinsDefault: number;
+  wheelDescription: string;
   updatedAt?: Timestamp;
 }
 

@@ -3,8 +3,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Star, Gift, Clock, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { subscribeToDocument, subscribeToPointsTransactions, subscribeToWheelPrizes, checkTodaySpin, spinWheel, subscribeToRewardOptions, subscribeToBusinessRewardRequests, createRewardRequest } from '@/lib/firebase/firestore';
-import { Business, PointsTransaction, WheelPrize, RewardOption, RewardRequest } from '@/types';
+import { subscribeToDocument, subscribeToPointsTransactions, subscribeToWheelPrizes, checkTodaySpin, spinWheel, subscribeToRewardOptions, subscribeToBusinessRewardRequests, createRewardRequest, subscribeToSettings } from '@/lib/firebase/firestore';
+import { Business, PointsTransaction, WheelPrize, RewardOption, RewardRequest, Settings as SettingsType } from '@/types';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { formatRelativeTime } from '@/lib/utils';
@@ -16,6 +16,7 @@ export default function BusinessPointsPage() {
   const currentActor = { id: currentUser?.uid || userData?.uid || 'unknown', name: business?.name || currentUser?.email || 'İşletme', role: 'business' as const };
   const [transactions, setTransactions] = useState<PointsTransaction[]>([]);
   const [prizes, setPrizes] = useState<WheelPrize[]>([]);
+  const [settings, setSettings] = useState<SettingsType | null>(null);
   const [hasSpunToday, setHasSpunToday] = useState(false);
   
   const [isSpinning, setIsSpinning] = useState(false);
@@ -38,10 +39,11 @@ export default function BusinessPointsPage() {
     });
     const u4 = subscribeToRewardOptions(data => setRewardOptions(data.filter(o => o.isActive)));
     const u5 = subscribeToBusinessRewardRequests(userData.businessId, data => setRewardRequests(data));
+    const u6 = subscribeToSettings(data => setSettings(data));
 
     checkTodaySpin(userData.businessId).then(setHasSpunToday);
 
-    return () => { u1(); u2(); u3(); u4(); u5(); };
+    return () => { u1(); u2(); u3(); u4(); u5(); u6(); };
   }, [userData?.businessId]);
 
   const handleSpin = async () => {
@@ -123,14 +125,21 @@ export default function BusinessPointsPage() {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       <div style={{ padding: '24px 32px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
         <h1 style={{ fontSize: 24, fontWeight: 800, color: '#f1f1f5', margin: 0 }}>Şans Çarkı & Puanlar</h1>
-        <p style={{ fontSize: 13, color: '#5c5c70', marginTop: 4 }}>Günlük şansınızı deneyin ve siparişlerinizde kullanabileceğiniz puanlar kazanın.</p>
+        <p style={{ fontSize: 13, color: '#5c5c70', marginTop: 4 }}>{settings?.wheelDescription || 'Günlük şansınızı deneyin ve sürpriz ödüller kazanın.'}</p>
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '28px 32px' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 350px', gap: 24, alignItems: 'start' }}>
           
           {/* Left: Wheel */}
-          <div style={{ background: '#16161e', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 20, padding: 40, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          {settings?.wheelEnabled === false ? (
+            <div style={{ background: '#16161e', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 20, padding: 40, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 400 }}>
+              <AlertCircle size={48} color="#5c5c70" style={{ marginBottom: 16 }} />
+              <h3 style={{ fontSize: 18, fontWeight: 700, color: '#f1f1f5', margin: 0 }}>Çark Şu Anda Aktif Değil</h3>
+              <p style={{ fontSize: 13, color: '#9898a8', marginTop: 8, textAlign: 'center' }}>Çark sistemi geçici olarak duraklatılmıştır. Mevcut puanlarınızla hediye çeki talebinde bulunmaya devam edebilirsiniz.</p>
+            </div>
+          ) : (
+            <div style={{ background: '#16161e', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 20, padding: 40, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
             
             <div style={{ textAlign: 'center', marginBottom: 32 }}>
               <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(251,191,36,0.1)', color: '#fbbf24', padding: '8px 16px', borderRadius: 20, fontSize: 18, fontWeight: 800 }}>
@@ -192,7 +201,8 @@ export default function BusinessPointsPage() {
                 </Button>
               )}
             </div>
-          </div>
+            </div>
+          )}
 
           {/* Right: History & Rewards */}
           <div style={{ background: '#16161e', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 20, overflow: 'hidden', display: 'flex', flexDirection: 'column', height: 600 }}>
