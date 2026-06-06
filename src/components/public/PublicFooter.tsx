@@ -1,8 +1,14 @@
+'use client';
+
 import React from 'react';
 import Link from 'next/link';
-import { SITE_INFO, BRANDS_DATA } from '@/data/publicSite';
+import { BRANDS_DATA } from '@/data/publicSite';
+import { usePublicSite } from '@/hooks/usePublicSite';
 
 export function PublicFooter() {
+  const { settings: SITE_INFO } = usePublicSite();
+  const currentYear = new Date().getFullYear();
+
   return (
     <footer style={{ background: '#050508', borderTop: '1px solid rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.7)', padding: '60px 24px 24px' }}>
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 24px' }}>

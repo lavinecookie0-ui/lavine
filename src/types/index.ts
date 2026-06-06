@@ -276,6 +276,19 @@ export interface SupportSettings {
   updatedAt?: Timestamp;
 }
 
+export interface PublicSiteSettings {
+  address: string;
+  phone: string;
+  email: string;
+  workingHours: string;
+  social: {
+    instagram: string;
+    facebook: string;
+    linkedin: string;
+  };
+  updatedAt?: Timestamp;
+}
+
 // ─────────────────────────────────────────────
 // CART (SEPET)
 // ─────────────────────────────────────────────
@@ -352,7 +365,7 @@ export interface PointsTransaction {
 export interface AuditLog {
   id?: string;
   action: string;
-  entityType: 'product' | 'order' | 'business' | 'route' | 'driver' | 'payment' | 'points' | 'wheel' | 'campaign' | 'delivery' | 'popup' | 'system';
+  entityType: 'product' | 'order' | 'business' | 'route' | 'driver' | 'payment' | 'points' | 'wheel' | 'campaign' | 'delivery' | 'popup' | 'reward' | 'system';
   entityId: string;
   actorId: string;
   actorName: string;
@@ -366,4 +379,25 @@ export interface AuditLog {
   previousData?: any;
   newData?: any;
   createdAt: Timestamp;
+}
+
+export interface RewardOption {
+  id: string;
+  title: string;
+  points: number;
+  isActive: boolean;
+  createdAt: Timestamp;
+}
+
+export interface RewardRequest {
+  id: string;
+  businessId: string;
+  businessName: string;
+  rewardOptionId: string;
+  rewardTitle: string;
+  points: number;
+  status: 'pending' | 'approved' | 'rejected';
+  giftCode?: string;
+  createdAt: Timestamp;
+  updatedAt?: Timestamp;
 }

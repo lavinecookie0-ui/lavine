@@ -26,7 +26,7 @@ const toDateInput = (t?: Timestamp) => {
 };
 
 export default function AdminCampaignsPage() {
-  const { currentUser } = useAuth();
+  const { currentUser, userData } = useAuth();
   const currentActor = { id: currentUser?.uid || 'unknown', name: currentUser?.displayName || currentUser?.email || 'Admin', role: 'admin' as const };
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,12 +51,13 @@ export default function AdminCampaignsPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => { 
+    if (!currentUser || userData?.role !== 'admin') return;
     const u = subscribeToCampaigns(
       d => { setCampaigns(d); setLoading(false); setError(null); },
       err => { setLoading(false); setError('Kampanyalar yüklenirken bir hata oluştu veya yetkiniz yok.'); console.error(err); }
     ); 
     return u; 
-  }, []);
+  }, [currentUser, userData]);
 
   const openCreate = () => {
     setEditingCampaign(null); setTitle(''); setDescription(''); setDiscountType('info'); setDiscountValue('');

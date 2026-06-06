@@ -4,7 +4,6 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Menu, X, ArrowRight } from 'lucide-react';
-import { SITE_INFO } from '@/data/publicSite';
 
 const NAV_LINKS = [
   { href: '/', label: 'Ana Sayfa' },

@@ -1,4 +1,4 @@
-export const SITE_INFO = {
+export const FALLBACK_SITE_INFO = {
   address: "Organize Sanayi Bölgesi, 3. Cadde No: 12, Şehitkamil / Gaziantep",
   phone: "+90 850 123 45 67",
   email: "info@lavine.com.tr",

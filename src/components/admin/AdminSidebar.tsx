@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, Building2, Package, ShoppingCart,
-  Map, CreditCard, Megaphone, Settings, LogOut, ChevronLeft, Candy, Truck, Activity, Tag, Printer, HelpCircle
+  Map, CreditCard, Megaphone, Settings, LogOut, ChevronLeft, Candy, Truck, Activity, Tag, Printer, HelpCircle, Gift
 } from 'lucide-react';
 import { logout } from '@/lib/firebase/auth';
 import { useRouter } from 'next/navigation';
@@ -23,6 +23,7 @@ const navItems = [
   { href: '/admin/routes', icon: Map, label: 'Rotalar' },
   { href: '/admin/popups', icon: Megaphone, label: 'Duyurular' },
   { href: '/admin/campaigns', icon: Tag, label: 'Kampanyalar' },
+  { href: '/admin/rewards', icon: Gift, label: 'Hediye Çekleri' },
   { href: '/admin/vega-export', icon: Package, label: 'Vega Dışa Aktarım' },
   { href: '/admin/settings', icon: Settings, label: 'Ayarlar' },
 ];

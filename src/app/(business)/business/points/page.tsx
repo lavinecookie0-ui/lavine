@@ -3,8 +3,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Star, Gift, Clock, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { subscribeToDocument, subscribeToPointsTransactions, subscribeToWheelPrizes, checkTodaySpin, spinWheel } from '@/lib/firebase/firestore';
-import { Business, PointsTransaction, WheelPrize } from '@/types';
+import { subscribeToDocument, subscribeToPointsTransactions, subscribeToWheelPrizes, checkTodaySpin, spinWheel, subscribeToRewardOptions, subscribeToBusinessRewardRequests, createRewardRequest } from '@/lib/firebase/firestore';
+import { Business, PointsTransaction, WheelPrize, RewardOption, RewardRequest } from '@/types';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { formatRelativeTime } from '@/lib/utils';
@@ -23,6 +23,11 @@ export default function BusinessPointsPage() {
   const [wonPrize, setWonPrize] = useState<WheelPrize | null>(null);
   const [showResultModal, setShowResultModal] = useState(false);
 
+  const [activeTab, setActiveTab] = useState<'history' | 'rewards'>('history');
+  const [rewardOptions, setRewardOptions] = useState<RewardOption[]>([]);
+  const [rewardRequests, setRewardRequests] = useState<RewardRequest[]>([]);
+  const [isRequesting, setIsRequesting] = useState(false);
+
   useEffect(() => {
     if (!userData?.businessId) return;
 
@@ -31,10 +36,12 @@ export default function BusinessPointsPage() {
     const u3 = subscribeToWheelPrizes(data => {
       setPrizes(data.filter(p => p.isActive));
     });
+    const u4 = subscribeToRewardOptions(data => setRewardOptions(data.filter(o => o.isActive)));
+    const u5 = subscribeToBusinessRewardRequests(userData.businessId, data => setRewardRequests(data));
 
     checkTodaySpin(userData.businessId).then(setHasSpunToday);
 
-    return () => { u1(); u2(); u3(); };
+    return () => { u1(); u2(); u3(); u4(); u5(); };
   }, [userData?.businessId]);
 
   const handleSpin = async () => {
@@ -88,6 +95,29 @@ export default function BusinessPointsPage() {
   };
 
   const balance = business?.pointsBalance ?? business?.totalPoints ?? 0;
+
+  const handleRequestReward = async (option: RewardOption) => {
+    if (!business) return;
+    if (balance < option.points) {
+      toast.error('Puanınız yetersiz.');
+      return;
+    }
+    setIsRequesting(true);
+    try {
+      await createRewardRequest({
+        businessId: business.id,
+        businessName: business.name,
+        rewardOptionId: option.id,
+        rewardTitle: option.title,
+        points: option.points,
+      }, currentActor);
+      toast.success('Hediye çeki talebiniz alındı. Onaylandığında puanınız düşülecektir.');
+    } catch (e: any) {
+      toast.error(e.message || 'Hata oluştu');
+    } finally {
+      setIsRequesting(false);
+    }
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
@@ -164,30 +194,95 @@ export default function BusinessPointsPage() {
             </div>
           </div>
 
-          {/* Right: History */}
+          {/* Right: History & Rewards */}
           <div style={{ background: '#16161e', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 20, overflow: 'hidden', display: 'flex', flexDirection: 'column', height: 600 }}>
-            <div style={{ padding: '20px', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Clock size={16} color="#fbbf24" />
-              <h2 style={{ fontSize: 14, fontWeight: 700, color: '#f1f1f5', margin: 0 }}>Puan Geçmişi</h2>
+            <div style={{ padding: '0 20px', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center' }}>
+              <button 
+                onClick={() => setActiveTab('history')}
+                style={{ padding: '20px 16px', background: 'transparent', border: 'none', borderBottom: activeTab === 'history' ? '2px solid #fbbf24' : '2px solid transparent', color: activeTab === 'history' ? '#fbbf24' : '#5c5c70', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, fontSize: 14 }}>
+                <Clock size={16} /> Puan Geçmişi
+              </button>
+              <button 
+                onClick={() => setActiveTab('rewards')}
+                style={{ padding: '20px 16px', background: 'transparent', border: 'none', borderBottom: activeTab === 'rewards' ? '2px solid #fbbf24' : '2px solid transparent', color: activeTab === 'rewards' ? '#fbbf24' : '#5c5c70', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, fontSize: 14 }}>
+                <Gift size={16} /> Hediye Çekleri
+              </button>
             </div>
+            
             <div style={{ flex: 1, overflowY: 'auto' }}>
-              {transactions.length === 0 ? (
-                <div style={{ padding: 40, textAlign: 'center', color: '#5c5c70' }}>
-                  <AlertCircle size={32} style={{ margin: '0 auto 12px', opacity: 0.3 }} />
-                  <p style={{ fontSize: 13, margin: 0 }}>Henüz puan hareketiniz yok.</p>
-                </div>
-              ) : (
-                transactions.map(tx => (
-                  <div key={tx.id} style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.04)', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-                    <div>
-                      <p style={{ fontSize: 13, fontWeight: 600, color: '#f1f1f5', margin: 0 }}>{tx.description}</p>
-                      <p style={{ fontSize: 11, color: '#5c5c70', margin: '4px 0 0' }}>{formatRelativeTime(tx.createdAt)}</p>
+              {activeTab === 'history' && (
+                <>
+                  {transactions.length === 0 ? (
+                    <div style={{ padding: 40, textAlign: 'center', color: '#5c5c70' }}>
+                      <AlertCircle size={32} style={{ margin: '0 auto 12px', opacity: 0.3 }} />
+                      <p style={{ fontSize: 13, margin: 0 }}>Henüz puan hareketiniz yok.</p>
                     </div>
-                    <div style={{ fontSize: 14, fontWeight: 800, color: tx.points > 0 ? '#34d399' : '#f87171' }}>
-                      {tx.points > 0 ? '+' : ''}{tx.points}
-                    </div>
+                  ) : (
+                    transactions.map(tx => (
+                      <div key={tx.id} style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.04)', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                        <div>
+                          <p style={{ fontSize: 13, fontWeight: 600, color: '#f1f1f5', margin: 0 }}>{tx.description}</p>
+                          <p style={{ fontSize: 11, color: '#5c5c70', margin: '4px 0 0' }}>{formatRelativeTime(tx.createdAt)}</p>
+                        </div>
+                        <div style={{ fontSize: 14, fontWeight: 800, color: tx.points > 0 ? '#34d399' : '#f87171' }}>
+                          {tx.points > 0 ? '+' : ''}{tx.points}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </>
+              )}
+
+              {activeTab === 'rewards' && (
+                <div style={{ padding: 20 }}>
+                  <h3 style={{ fontSize: 13, fontWeight: 700, color: '#f1f1f5', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>Ödül Seçenekleri</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
+                    {rewardOptions.length === 0 ? (
+                      <p style={{ fontSize: 13, color: '#5c5c70', margin: 0 }}>Aktif ödül seçeneği bulunmuyor.</p>
+                    ) : (
+                      rewardOptions.map(opt => (
+                        <div key={opt.id} style={{ padding: '16px', background: '#1e1e2a', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <div>
+                            <p style={{ fontSize: 14, fontWeight: 700, color: '#f1f1f5', margin: '0 0 4px' }}>{opt.title}</p>
+                            <p style={{ fontSize: 12, color: '#fbbf24', fontWeight: 600, margin: 0 }}>{opt.points} Puan</p>
+                          </div>
+                          <Button size="sm" onClick={() => handleRequestReward(opt)} disabled={balance < opt.points || isRequesting}>Talep Et</Button>
+                        </div>
+                      ))
+                    )}
                   </div>
-                ))
+
+                  <h3 style={{ fontSize: 13, fontWeight: 700, color: '#f1f1f5', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>Taleplerim</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {rewardRequests.length === 0 ? (
+                      <p style={{ fontSize: 13, color: '#5c5c70', margin: 0 }}>Henüz talebiniz yok.</p>
+                    ) : (
+                      rewardRequests.map(req => (
+                        <div key={req.id} style={{ padding: '12px 16px', background: 'rgba(255,255,255,0.02)', borderRadius: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: '#f1f1f5' }}>{req.rewardTitle}</span>
+                            <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 12, 
+                              background: req.status === 'approved' ? 'rgba(52,211,153,0.1)' : req.status === 'rejected' ? 'rgba(239,68,68,0.1)' : 'rgba(251,191,36,0.1)',
+                              color: req.status === 'approved' ? '#34d399' : req.status === 'rejected' ? '#f87171' : '#fbbf24'
+                            }}>
+                              {req.status === 'approved' ? 'Onaylandı' : req.status === 'rejected' ? 'Reddedildi' : 'Bekliyor'}
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span style={{ fontSize: 11, color: '#5c5c70' }}>{formatRelativeTime(req.createdAt)}</span>
+                            <span style={{ fontSize: 12, color: '#fbbf24', fontWeight: 600 }}>{req.points} Puan</span>
+                          </div>
+                          {req.status === 'approved' && req.giftCode && (
+                            <div style={{ marginTop: 8, padding: '8px', background: '#16161e', border: '1px solid rgba(251,191,36,0.3)', borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span style={{ fontSize: 12, color: '#9898a8' }}>Hediye Kodu:</span>
+                              <span style={{ fontSize: 14, fontWeight: 800, color: '#fbbf24', letterSpacing: '0.1em' }}>{req.giftCode}</span>
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
               )}
             </div>
           </div>

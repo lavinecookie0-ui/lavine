@@ -2,10 +2,11 @@
 
 import React, { useState } from 'react';
 import { createContactMessage } from '@/lib/firebase/firestore';
-import { SITE_INFO } from '@/data/publicSite';
+import { usePublicSite } from '@/hooks/usePublicSite';
 import toast from 'react-hot-toast';
 
 export default function IletisimPage() {
+  const { settings: SITE_INFO } = usePublicSite();
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     name: '',

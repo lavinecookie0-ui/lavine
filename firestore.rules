@@ -106,7 +106,7 @@ service cloud.firestore {
     }
 
     match /wheelSpins/{spinId} {
-      allow read:   if isAdmin() || (isActiveBusiness() && resource.data.businessId == getUserData().businessId);
+      allow read:   if isAdmin() || (isActiveBusiness() && spinId.split('_')[0] == getUserData().businessId);
       allow create: if isAdmin() || (isActiveBusiness() && request.resource.data.businessId == getUserData().businessId);
       allow update: if isAdmin();
       allow delete: if isAdmin();
@@ -139,6 +139,19 @@ service cloud.firestore {
       allow write:  if isAdmin();
     }
 
+    // ─── Hediye Çeki Talep Sistemi ───────────────────────────
+    match /rewardOptions/{optionId} {
+      allow read: if isAuth();
+      allow write: if isAdmin();
+    }
+
+    match /rewardRequests/{requestId} {
+      allow read: if isAdmin() || (isBusiness() && resource.data.businessId == getUserData().businessId);
+      allow create: if isBusiness() && request.resource.data.businessId == getUserData().businessId;
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
     match /deliveries/{deliveryId} {
       allow read:   if isAdmin();
       allow write:  if isAdmin();
@@ -148,6 +161,11 @@ service cloud.firestore {
     match /settings/{settingId} {
       allow read:   if isAuth();
       allow write:  if isAdmin();
+    }
+
+    match /publicSettings/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
     // ─── Audit Logs ──────────────────────────────────────────

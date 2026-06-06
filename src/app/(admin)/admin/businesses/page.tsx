@@ -1,13 +1,15 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Building2, Plus, Search, CheckCircle, XCircle, Eye, Pencil, Trash2, ClipboardList, CreditCard, Star } from 'lucide-react';
+import { Building2, Plus, Search, CheckCircle, XCircle, Eye, Pencil, Trash2, ClipboardList, CreditCard, Star, Mail, Clock } from 'lucide-react';
 import { AdminHeader } from '@/components/admin/AdminHeader';
 import { Button } from '@/components/ui/Button';
 import { Modal, ConfirmDialog } from '@/components/ui/Modal';
-import { subscribeToBusinesses, subscribeToApplications, updateBusiness, deleteBusiness, reviewApplication, createPayment, addManualPoints } from '@/lib/firebase/firestore';
-import { formatCurrency, formatDate, TR_CITIES } from '@/lib/utils';
-import { Business, Application, BusinessStatus } from '@/types';
+import { subscribeToBusinesses, subscribeToApplications, updateBusiness, deleteBusiness, reviewApplication, createPayment, subscribeToPointsTransactions, createAuditLog } from '@/lib/firebase/firestore';
+import { auth } from '@/lib/firebase/config';
+import { sendPasswordResetEmail } from 'firebase/auth';
+import { formatCurrency, formatDate, formatRelativeTime, TR_CITIES } from '@/lib/utils';
+import { Business, Application, BusinessStatus, PointsTransaction } from '@/types';
 import toast from 'react-hot-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { EntityAuditLogs } from '@/components/admin/EntityAuditLogs';
@@ -59,10 +61,8 @@ export default function BusinessesPage() {
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentDesc, setPaymentDesc] = useState('');
   
-  const [pointsModal, setPointsModal] = useState<Business | null>(null);
-  const [manualPoints, setManualPoints] = useState('');
-  const [pointsDesc, setPointsDesc] = useState('');
-  const [pointsActionType, setPointsActionType] = useState<'add'|'remove'>('add');
+  const [historyModal, setHistoryModal] = useState<Business | null>(null);
+  const [pointsTransactions, setPointsTransactions] = useState<PointsTransaction[]>([]);
 
   const [approvalCreditLimit, setApprovalCreditLimit] = useState('');
   const [approvalCariCode, setApprovalCariCode] = useState('');
@@ -75,6 +75,15 @@ export default function BusinessesPage() {
     const u2 = subscribeToApplications((d) => setApplications(d));
     return () => { u1(); u2(); };
   }, []);
+
+  useEffect(() => {
+    if (!historyModal) {
+      setPointsTransactions([]);
+      return;
+    }
+    const unsub = subscribeToPointsTransactions(historyModal.id, (txs) => setPointsTransactions(txs));
+    return unsub;
+  }, [historyModal]);
 
   const filteredBusinesses = useMemo(() =>
     businesses.filter((b) => {
@@ -110,23 +119,7 @@ export default function BusinessesPage() {
     finally { setSaving(false); }
   };
 
-  const handleManualPoints = async () => {
-    if (!pointsModal || !manualPoints) return;
-    setSaving(true);
-    try {
-      const p = parseFloat(manualPoints);
-      const points = pointsActionType === 'add' ? Math.abs(p) : -Math.abs(p);
-      await addManualPoints(pointsModal.id, points, pointsDesc || (points > 0 ? 'Admin tarafından eklendi' : 'Admin tarafından düşüldü'), currentActor);
-      toast.success('Puan işlemi başarılı');
-      setPointsModal(null);
-      setManualPoints('');
-      setPointsDesc('');
-    } catch (err: any) {
-      toast.error(err.message || 'İşlem başarısız');
-    } finally {
-      setSaving(false);
-    }
-  };
+
 
   const handleApproveApplication = async (app: Application) => {
     if (!approvalCariCode.trim() || !approvalCariName.trim() || !approvalCreditLimit.trim()) {
@@ -154,6 +147,22 @@ export default function BusinessesPage() {
     try { await reviewApplication(rejectConfirm.id, 'rejected', rejectReason, undefined, undefined, undefined, undefined, currentActor); toast.success('Reddedildi'); setRejectConfirm(null); setRejectReason(''); setSelectedApplication(null); }
     catch { toast.error('İşlem başarısız'); }
     finally { setSaving(false); }
+  };
+
+  const handlePasswordReset = async () => {
+    if (!selectedBusiness?.email) return;
+    setSaving(true);
+    try {
+      await sendPasswordResetEmail(auth, selectedBusiness.email);
+      toast.success('Şifre sıfırlama e-postası gönderildi');
+      await createAuditLog(currentActor, 'business_password_reset_sent', 'business', selectedBusiness.id, {
+        details: 'Şifre sıfırlama e-postası gönderildi.',
+      });
+    } catch (e: any) {
+      toast.error('Hata: ' + e.message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const iconBtn = (color: string): React.CSSProperties => ({
@@ -244,7 +253,7 @@ export default function BusinessesPage() {
                             { icon: <Eye size={14} />, action: () => setSelectedBusiness(b), hover: '#e11d48' },
                             { icon: <Pencil size={14} />, action: () => { setEditingBusiness(b); setEditForm(b); }, hover: '#fbbf24' },
                             { icon: <CreditCard size={14} />, action: () => setPaymentModal(b), hover: '#34d399' },
-                            { icon: <Star size={14} />, action: () => setPointsModal(b), hover: '#a855f7' },
+                            { icon: <Clock size={14} />, action: () => setHistoryModal(b), hover: '#a855f7' },
                             { icon: <Trash2 size={14} />, action: () => setDeleteConfirm(b.id), hover: '#f87171' },
                           ].map(({ icon, action, hover }, idx) => (
                             <button key={idx} onClick={action} style={iconBtn(hover)}
@@ -351,6 +360,12 @@ export default function BusinessesPage() {
               </div>
             )}
 
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+              <Button size="sm" variant="secondary" leftIcon={<Mail size={15} />} onClick={handlePasswordReset} loading={saving}>
+                Şifre Sıfırlama Bağlantısı Gönder
+              </Button>
+            </div>
+
             <EntityAuditLogs businessId={selectedBusiness.id} />
           </div>
         )}
@@ -418,29 +433,34 @@ export default function BusinessesPage() {
         )}
       </Modal>
 
-      {/* Points Modal */}
-      <Modal isOpen={!!pointsModal} onClose={() => setPointsModal(null)} title={`Puan İşlemi — ${pointsModal?.name}`} size="sm"
-        footer={<><Button variant="secondary" onClick={() => setPointsModal(null)}>İptal</Button><Button onClick={handleManualPoints} loading={saving} disabled={!manualPoints}>Kaydet</Button></>}>
-        {pointsModal && (
+      {/* Points History Modal */}
+      <Modal isOpen={!!historyModal} onClose={() => setHistoryModal(null)} title={`Puan Geçmişi — ${historyModal?.name}`} size="md"
+        footer={<Button variant="secondary" onClick={() => setHistoryModal(null)}>Kapat</Button>}>
+        {historyModal && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div style={{ padding: '14px 16px', background: '#1e1e2a', borderRadius: 12 }}>
               <p style={{ fontSize: 12, color: '#5c5c70', margin: '0 0 4px' }}>Mevcut Puan Bakiyesi</p>
-              <p style={{ fontSize: 22, fontWeight: 800, color: '#fbbf24', margin: 0 }}>{pointsModal.pointsBalance ?? pointsModal.totalPoints ?? 0}</p>
+              <p style={{ fontSize: 22, fontWeight: 800, color: '#fbbf24', margin: 0 }}>{historyModal.pointsBalance ?? historyModal.totalPoints ?? 0}</p>
             </div>
-            <div>
-              <label style={S.label}>İşlem Tipi</label>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                <button onClick={() => setPointsActionType('add')} style={{ padding: '10px', borderRadius: 10, border: 'none', background: pointsActionType === 'add' ? 'rgba(52,211,153,0.1)' : '#1e1e2a', color: pointsActionType === 'add' ? '#34d399' : '#9898a8', fontWeight: 600, cursor: 'pointer' }}>Ekle (+)</button>
-                <button onClick={() => setPointsActionType('remove')} style={{ padding: '10px', borderRadius: 10, border: 'none', background: pointsActionType === 'remove' ? 'rgba(239,68,68,0.1)' : '#1e1e2a', color: pointsActionType === 'remove' ? '#f87171' : '#9898a8', fontWeight: 600, cursor: 'pointer' }}>Düş (-)</button>
-              </div>
-            </div>
-            <div>
-              <label style={S.label}>Puan (Miktar)</label>
-              <input type="number" placeholder="Örn: 100" value={manualPoints} onChange={e => setManualPoints(e.target.value)} style={S.input} />
-            </div>
-            <div>
-              <label style={S.label}>Açıklama</label>
-              <input placeholder="Manuel ekleme nedeni..." value={pointsDesc} onChange={e => setPointsDesc(e.target.value)} style={S.input} />
+            
+            <div style={{ maxHeight: 300, overflowY: 'auto', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 12 }}>
+              {pointsTransactions.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '20px', color: '#5c5c70', fontSize: 13 }}>
+                  Henüz puan hareketi bulunmuyor.
+                </div>
+              ) : (
+                pointsTransactions.map(tx => (
+                  <div key={tx.id} style={{ padding: '12px 0', borderBottom: '1px solid rgba(255,255,255,0.04)', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                    <div>
+                      <p style={{ fontSize: 13, fontWeight: 600, color: '#f1f1f5', margin: 0 }}>{tx.description}</p>
+                      <p style={{ fontSize: 11, color: '#5c5c70', margin: '4px 0 0' }}>{formatRelativeTime(tx.createdAt)}</p>
+                    </div>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: tx.points > 0 ? '#34d399' : '#f87171' }}>
+                      {tx.points > 0 ? '+' : ''}{tx.points}
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         )}

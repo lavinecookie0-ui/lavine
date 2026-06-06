@@ -43,6 +43,9 @@ import {
   CartItem,
   Brand,
   SupportSettings,
+  RewardOption,
+  RewardRequest,
+  PublicSiteSettings,
 } from '@/types';
 
 // ─────────────────────────────────────────────
@@ -1229,4 +1232,175 @@ export async function createContactMessage(data: Omit<ContactMessage, 'id' | 'st
     createdAt: serverTimestamp(),
   });
   return ref.id;
+}
+
+// ─────────────────────────────────────────────
+// REWARDS (HEDİYE ÇEKİ TALEP SİSTEMİ)
+// ─────────────────────────────────────────────
+
+export function subscribeToRewardOptions(callback: (options: RewardOption[]) => void): Unsubscribe {
+  return subscribeToCollection<RewardOption>(
+    'rewardOptions',
+    [orderBy('points', 'asc')],
+    callback
+  );
+}
+
+export async function createRewardOption(data: Omit<RewardOption, 'id' | 'createdAt'>, actor: Actor): Promise<string> {
+  const ref = await addDoc(collection(db, 'rewardOptions'), {
+    ...data,
+    createdAt: serverTimestamp(),
+  });
+  await createAuditLog(actor, 'reward_option_created', 'reward', ref.id, {
+    details: 'Yeni ödül seçeneği eklendi.',
+    newData: data,
+  });
+  return ref.id;
+}
+
+export async function updateRewardOption(id: string, data: Partial<RewardOption>, actor: Actor): Promise<void> {
+  const docRef = doc(db, 'rewardOptions', id);
+  await updateDoc(docRef, data);
+  await createAuditLog(actor, 'reward_option_updated', 'reward', id, {
+    details: 'Ödül seçeneği güncellendi.',
+    newData: data,
+  });
+}
+
+export async function deleteRewardOption(id: string, actor: Actor): Promise<void> {
+  const docRef = doc(db, 'rewardOptions', id);
+  await deleteDoc(docRef);
+  await createAuditLog(actor, 'reward_option_deleted', 'reward', id, {
+    details: 'Ödül seçeneği silindi.',
+  });
+}
+
+export function subscribeToRewardRequests(callback: (reqs: RewardRequest[]) => void): Unsubscribe {
+  return subscribeToCollection<RewardRequest>(
+    'rewardRequests',
+    [orderBy('createdAt', 'desc')],
+    callback
+  );
+}
+
+export function subscribeToBusinessRewardRequests(businessId: string, callback: (reqs: RewardRequest[]) => void): Unsubscribe {
+  const q = query(collection(db, 'rewardRequests'), where('businessId', '==', businessId));
+  return onSnapshot(q, (snapshot) => {
+    const data = snapshot.docs
+      .map(d => ({ id: d.id, ...d.data() }) as RewardRequest)
+      .sort((a, b) => {
+        const ta = (a.createdAt as any)?.seconds ?? 0;
+        const tb = (b.createdAt as any)?.seconds ?? 0;
+        return tb - ta;
+      });
+    callback(data);
+  });
+}
+
+export async function createRewardRequest(data: Omit<RewardRequest, 'id' | 'createdAt' | 'status'>, actor: Actor): Promise<string> {
+  const ref = await addDoc(collection(db, 'rewardRequests'), {
+    ...data,
+    status: 'pending',
+    createdAt: serverTimestamp(),
+  });
+  await createAuditLog(actor, 'reward_request_created', 'reward', ref.id, {
+    businessId: data.businessId,
+    details: `${data.points} puan değerinde ${data.rewardTitle} talep edildi.`,
+  });
+  return ref.id;
+}
+
+export async function approveRewardRequest(requestId: string, giftCode: string, actor: Actor): Promise<void> {
+  await runTransaction(db, async (transaction) => {
+    const reqRef = doc(db, 'rewardRequests', requestId);
+    const reqDoc = await transaction.get(reqRef);
+    if (!reqDoc.exists()) throw new Error('Talep bulunamadı');
+    
+    const reqData = reqDoc.data() as RewardRequest;
+    if (reqData.status !== 'pending') throw new Error('Bu talep zaten işlenmiş.');
+
+    const businessRef = doc(db, 'businesses', reqData.businessId);
+    const businessDoc = await transaction.get(businessRef);
+    if (!businessDoc.exists()) throw new Error('İşletme bulunamadı');
+
+    const businessData = businessDoc.data();
+    const currentBalance = businessData.pointsBalance ?? businessData.totalPoints ?? 0;
+
+    if (currentBalance < reqData.points) {
+      throw new Error('İşletmenin bakiyesi yetersiz.');
+    }
+
+    transaction.update(reqRef, {
+      status: 'approved',
+      giftCode,
+      updatedAt: serverTimestamp(),
+    });
+
+    transaction.update(businessRef, {
+      pointsBalance: increment(-reqData.points)
+    });
+
+    const txRef = doc(collection(db, 'pointsTransactions'));
+    transaction.set(txRef, {
+      businessId: reqData.businessId,
+      type: 'reward_used',
+      points: -reqData.points,
+      description: `Hediye Çeki Onayı: ${reqData.rewardTitle}`,
+      createdAt: serverTimestamp(),
+      createdBy: actor.name
+    });
+
+    const auditRef = doc(collection(db, 'auditLogs'));
+    transaction.set(auditRef, {
+      id: auditRef.id,
+      action: 'reward_request_approved',
+      entityType: 'reward',
+      entityId: requestId,
+      actorId: actor.id,
+      actorName: actor.name,
+      actorRole: actor.role,
+      businessId: reqData.businessId,
+      details: `Hediye çeki talebi onaylandı. Puan düşüldü: ${reqData.points}`,
+      createdAt: serverTimestamp()
+    });
+  });
+}
+
+export async function rejectRewardRequest(requestId: string, actor: Actor): Promise<void> {
+  const reqRef = doc(db, 'rewardRequests', requestId);
+  const reqDoc = await getDoc(reqRef);
+  if (!reqDoc.exists()) throw new Error('Talep bulunamadı');
+  
+  await updateDoc(reqRef, {
+    status: 'rejected',
+    updatedAt: serverTimestamp(),
+  });
+
+  await createAuditLog(actor, 'reward_request_rejected', 'reward', requestId, {
+    businessId: reqDoc.data()?.businessId,
+    details: 'Hediye çeki talebi reddedildi.',
+  });
+}
+
+// ─────────────────────────────────────────────
+// PUBLIC CMS (GENEL SİTE AYARLARI)
+// ─────────────────────────────────────────────
+
+export function subscribeToPublicSiteSettings(callback: (s: PublicSiteSettings | null) => void): Unsubscribe {
+  return subscribeToDocument<PublicSiteSettings>('publicSettings', 'site', callback);
+}
+
+export async function getPublicSiteSettings(): Promise<PublicSiteSettings | null> {
+  const docRef = doc(db, 'publicSettings', 'site');
+  const snap = await getDoc(docRef);
+  return snap.exists() ? snap.data() as PublicSiteSettings : null;
+}
+
+export async function updatePublicSiteSettings(data: Partial<PublicSiteSettings>, actor: Actor): Promise<void> {
+  const docRef = doc(db, 'publicSettings', 'site');
+  await setDoc(docRef, { ...data, updatedAt: serverTimestamp() }, { merge: true });
+  await createAuditLog(actor, 'public_site_settings_updated', 'system', 'site', {
+    details: 'Site iletişim ve genel ayarları güncellendi.',
+    newData: data,
+  });
 }
